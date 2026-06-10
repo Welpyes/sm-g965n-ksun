@@ -55,8 +55,13 @@ extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
 
     old = """	struct user_arg_ptr argv = { .ptr.native = __argv };
 	struct user_arg_ptr envp = { .ptr.native = __envp };
-	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
-"""
+	int ksu_execve_dfd = AT_FDCWD;
+	int ksu_execve_flags = 0;
+#ifdef CONFIG_KSU
+	ksu_handle_execveat(&ksu_execve_dfd, &filename, &argv, &envp, &ksu_execve_flags);
+#endif
+	return do_execveat_common(ksu_execve_dfd, filename, argv, envp, ksu_execve_flags);
+}"""
 
     new = """	struct user_arg_ptr argv = { .ptr.native = __argv };
 	struct user_arg_ptr envp = { .ptr.native = __envp };
@@ -66,17 +71,37 @@ extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
 	ksu_handle_execveat(&ksu_execve_dfd, &filename, &argv, &envp, &ksu_execve_flags);
 #endif
 	return do_execveat_common(ksu_execve_dfd, filename, argv, envp, ksu_execve_flags);
-"""
+}
 
-    if "ksu_execve_dfd" not in s:
+int do_execveat(int fd, struct filename *filename,
+		const char __user *const __user *__argv,
+		const char __user *const __user *__envp,
+		int flags)
+{
+	struct user_arg_ptr argv = { .ptr.native = __argv };
+	struct user_arg_ptr envp = { .ptr.native = __envp };
+
+#ifdef CONFIG_KSU
+	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
+#endif
+
+	return do_execveat_common(fd, filename, argv, envp, flags);
+}"""
+
+    if "int do_execveat" not in s:
         s = replace_once(s, old, new, file)
 
     old = """	struct user_arg_ptr envp = {
 		.is_compat = true,
 		.ptr.compat = __envp,
 	};
-	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
-"""
+	int ksu_compat_execve_dfd = AT_FDCWD;
+	int ksu_compat_execve_flags = 0;
+#ifdef CONFIG_KSU
+	ksu_handle_execveat(&ksu_compat_execve_dfd, &filename, &argv, &envp, &ksu_compat_execve_flags);
+#endif
+	return do_execveat_common(ksu_compat_execve_dfd, filename, argv, envp, ksu_compat_execve_flags);
+}"""
 
     new = """	struct user_arg_ptr envp = {
 		.is_compat = true,
@@ -88,9 +113,30 @@ extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
 	ksu_handle_execveat(&ksu_compat_execve_dfd, &filename, &argv, &envp, &ksu_compat_execve_flags);
 #endif
 	return do_execveat_common(ksu_compat_execve_dfd, filename, argv, envp, ksu_compat_execve_flags);
-"""
+}
 
-    if "ksu_compat_execve_dfd" not in s:
+static int compat_do_execveat(int fd, struct filename *filename,
+			      const compat_uptr_t __user *__argv,
+			      const compat_uptr_t __user *__envp,
+			      int flags)
+{
+	struct user_arg_ptr argv = {
+		.is_compat = true,
+		.ptr.compat = __argv,
+	};
+	struct user_arg_ptr envp = {
+		.is_compat = true,
+		.ptr.compat = __envp,
+	};
+
+#ifdef CONFIG_KSU
+	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
+#endif
+
+	return do_execveat_common(fd, filename, argv, envp, flags);
+}"""
+
+    if "static int compat_do_execveat" not in s:
         s = replace_once(s, old, new, file)
 
     write(file, s)
@@ -131,8 +177,7 @@ def patch_read_write():
 
     proto = """#ifdef CONFIG_KSU
 extern bool ksu_vfs_read_hook __read_mostly;
-extern __attribute__((cold)) int ksu_handle_sys_read(unsigned int fd,
-				char __user **buf_ptr, size_t *count_ptr);
+extern void ksu_handle_sys_read(unsigned int fd);
 #endif
 
 """
@@ -149,12 +194,12 @@ extern __attribute__((cold)) int ksu_handle_sys_read(unsigned int fd,
 
 #ifdef CONFIG_KSU
 	if (unlikely(ksu_vfs_read_hook))
-		ksu_handle_sys_read(fd, &buf, &count);
+		ksu_handle_sys_read(fd);
 #endif
 
 	if (f.file) {"""
 
-    if "ksu_handle_sys_read(fd, &buf, &count);" not in s:
+    if "ksu_handle_sys_read(fd);" not in s:
         s = replace_once(s, old, new, file)
 
     write(file, s)
@@ -167,6 +212,10 @@ def patch_stat():
 __attribute__((hot))
 extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
 				int *flags);
+extern void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr);
+#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
+extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr);
+#endif
 #endif
 
 """
@@ -188,6 +237,64 @@ extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
 	error = vfs_fstatat(dfd, filename, &stat, flag);"""
 
     if "ksu_handle_stat(&dfd, &filename, &flag);" not in s:
+        s = replace_once(s, old, new, file)
+
+    old = """SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
+{
+	struct kstat stat;
+	int error = vfs_fstat(fd, &stat);
+
+	if (!error)
+		error = cp_new_stat(&stat, statbuf);
+
+	return error;
+}"""
+
+    new = """SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
+{
+	struct kstat stat;
+	int error = vfs_fstat(fd, &stat);
+
+#ifdef CONFIG_KSU
+	ksu_handle_newfstat_ret(&fd, &statbuf);
+#endif
+
+	if (!error)
+		error = cp_new_stat(&stat, statbuf);
+
+	return error;
+}"""
+
+    if "ksu_handle_newfstat_ret" not in s:
+        s = replace_once(s, old, new, file)
+
+    old = """SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __user *, statbuf)
+{
+	struct kstat stat;
+	int error = vfs_fstat(fd, &stat);
+
+	if (!error)
+		error = cp_new_stat64(&stat, statbuf);
+
+	return error;
+}"""
+
+    new = """SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __user *, statbuf)
+{
+	struct kstat stat;
+	int error = vfs_fstat(fd, &stat);
+
+#ifdef CONFIG_KSU
+	ksu_handle_fstat64_ret(&fd, &statbuf);
+#endif
+
+	if (!error)
+		error = cp_new_stat64(&stat, statbuf);
+
+	return error;
+}"""
+
+    if "ksu_handle_fstat64_ret" not in s:
         s = replace_once(s, old, new, file)
 
     write(file, s)

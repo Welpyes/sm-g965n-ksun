@@ -54,9 +54,9 @@ jobs:
           git clone \
             --depth=1 \
             --branch "${{ inputs.BRANCH }}" \
-            https://github.com/dazui-py/sm-g956n-ksun.git
+            https://github.com/Welpyes/sm-g965n-ksun.git
 
-          cd sm-g956n-ksun
+          cd sm-g965n-ksun
 
           echo "KERNEL_ROOT=$(pwd)" >> "$GITHUB_ENV"
           echo "Cloned kernel repo at: $(pwd)"
@@ -119,7 +119,7 @@ jobs:
             echo "Defconfig: exynos9810-star2ltekor_defconfig"
             echo "Android major version: q"
             echo "KernelSU hooks: ${{ inputs.KSU }}"
-            echo "Repo: https://github.com/dazui-py/sm-g956n-ksun.git"
+            echo "Repo: https://github.com/Welpyes/sm-g965n-ksun.git"
             echo "Branch: ${{ inputs.BRANCH }}"
             echo "Commit: $(git rev-parse --short HEAD)"
             echo "Date: $(date)"
@@ -136,10 +136,10 @@ jobs:
         with:
           name: Config-${{ env.BUILD_NAME }}
           path: |
-            sm-g956n-ksun/.config
-            sm-g956n-ksun/build_config.txt
-            sm-g956n-ksun/buildDetails.txt
-            sm-g956n-ksun/build.log
+            sm-g965n-ksun/.config
+            sm-g965n-ksun/build_config.txt
+            sm-g965n-ksun/buildDetails.txt
+            sm-g965n-ksun/build.log
           if-no-files-found: warn
 
       - name: Upload kernel artifacts
@@ -148,11 +148,11 @@ jobs:
         with:
           name: Kernel-${{ env.BUILD_NAME }}
           path: |
-            sm-g956n-ksun/arch/arm64/boot/Image
-            sm-g956n-ksun/arch/arm64/boot/Image.gz
-            sm-g956n-ksun/arch/arm64/boot/Image.gz-dtb
-            sm-g956n-ksun/arch/arm64/boot/dts/exynos/*.dtb
-            sm-g956n-ksun/arch/arm64/boot/dts/exynos/*.dtbo
+            sm-g965n-ksun/arch/arm64/boot/Image
+            sm-g965n-ksun/arch/arm64/boot/Image.gz
+            sm-g965n-ksun/arch/arm64/boot/Image.gz-dtb
+            sm-g965n-ksun/arch/arm64/boot/dts/exynos/*.dtb
+            sm-g965n-ksun/arch/arm64/boot/dts/exynos/*.dtbo
           if-no-files-found: warn
           compression-level: 9
 
@@ -181,6 +181,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Modules-${{ env.BUILD_NAME }}
-          path: sm-g956n-ksun/kernel_modules/*
+          path: sm-g965n-ksun/kernel_modules/*
           if-no-files-found: warn
           compression-level: 9
