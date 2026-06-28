@@ -60,7 +60,7 @@ static char *panel_state_names[] = {
 };
 
 #ifdef CONFIG_SUPPORT_DOZE
-extern int fix_green_screen;
+int fix_green_screen = 1;
 #endif
 
 static int boot_panel_id;
