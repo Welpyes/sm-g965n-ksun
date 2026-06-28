@@ -8,12 +8,6 @@ on:
         required: true
         default: main
 
-      KSU:
-        description: Apply KernelSU hooks
-        required: false
-        default: false
-        type: boolean
-
       SILENT_BUILD:
         description: Silent build logs
         required: false
@@ -82,17 +76,10 @@ jobs:
          sed -i '/YYLTYPE yylloc;/d' scripts/dtc/dtc-lexer.lex.c_shipped || true
          sed -i '/YYLTYPE yylloc;/d' scripts/dtc/dtc-lexer.lex.c || true
 
-      - name: Apply KernelSU hooks
-        if: ${{ inputs.KSU }}
+      - name: Disable KernelSU
         run: |
           cd "$KERNEL_ROOT"
-
-          if [ -f apply_ksu_hooks.py ]; then
-            python3 apply_ksu_hooks.py
-          else
-            echo "apply_ksu_hooks.py not found"
-            exit 1
-          fi
+          sed -i '/CONFIG_KSU=y/c\# CONFIG_KSU is not set' arch/arm64/configs/exynos9810-star2ltekor_defconfig
 
       - name: Build kernel
         run: |
@@ -118,7 +105,7 @@ jobs:
             echo "Codename: star2ltekor"
             echo "Defconfig: exynos9810-star2ltekor_defconfig"
             echo "Android major version: q"
-            echo "KernelSU hooks: ${{ inputs.KSU }}"
+            echo "KernelSU: disabled"
             echo "Repo: https://github.com/Welpyes/sm-g965n-ksun.git"
             echo "Branch: ${{ inputs.BRANCH }}"
             echo "Commit: $(git rev-parse --short HEAD)"
