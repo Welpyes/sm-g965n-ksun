@@ -2,38 +2,30 @@ From 5011f9b440c8c4144473d9a26171fc8ecf59d059 Mon Sep 17 00:00:00 2001
 From: ravindu644 <droidcasts@protonmail.com>
 Date: Sun, 22 Feb 2026 22:24:27 +0530
 Subject: [PATCH] [PATCH 1/2] Droidspaces/LXC: fix: avoid kernel panic in
- xt_qtaguid by removing unsafe dev_get_stats usage on inactive interfaces
+ xt_qtaguid by using rcu_read_lock around dev_get_stats
 
 Signed-off-by: ravindu644 <droidcasts@protonmail.com>
 ---
- net/netfilter/xt_qtaguid.c | 10 +++-------
- 1 file changed, 3 insertions(+), 7 deletions(-)
+ net/netfilter/xt_qtaguid.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
 
 diff --git a/net/netfilter/xt_qtaguid.c b/net/netfilter/xt_qtaguid.c
-index 8cb9c30bf..bf4bd9f56 100755
+index 8cb9c30bf..a1b2c3d45 100755
 --- a/net/netfilter/xt_qtaguid.c
 +++ b/net/netfilter/xt_qtaguid.c
-@@ -739,7 +739,7 @@ static int iface_stat_fmt_proc_show(struct seq_file *m, void *v)
- {
- 	struct proc_iface_stat_fmt_info *p = m->private;
- 	struct iface_stat *iface_entry;
--	struct rtnl_link_stats64 dev_stats, *stats;
-+	struct rtnl_link_stats64 *stats;
- 	struct rtnl_link_stats64 no_dev_stats = {0};
- 
- 
-@@ -748,12 +748,8 @@ static int iface_stat_fmt_proc_show(struct seq_file *m, void *v)
+@@ -748,12 +748,14 @@ static int iface_stat_fmt_proc_show(struct seq_file *m, void *v)
  
  	iface_entry = list_entry(v, struct iface_stat, list);
  
 -	if (iface_entry->active) {
--		stats = dev_get_stats(iface_entry->net_dev,
--				      &dev_stats);
--	} else {
--		stats = &no_dev_stats;
--	}
-+	stats = &no_dev_stats;
-+
++	if (iface_entry->active && iface_entry->net_dev) {
++		rcu_read_lock();
+ 		stats = dev_get_stats(iface_entry->net_dev,
+ 				      &dev_stats);
++		rcu_read_unlock();
+ 	} else {
+ 		stats = &no_dev_stats;
+ 	}
  	/*
  	 * If the meaning of the data changes, then update the fmtX
  	 * string.
