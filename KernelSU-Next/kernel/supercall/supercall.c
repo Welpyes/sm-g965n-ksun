@@ -18,7 +18,7 @@
 #include "klog.h" // IWYU pragma: keep
 #include "manager/manager_identity.h"
 
-#include "tiny_sulog.h"
+#include "sulog/event.h"
 
 uint32_t ksuver_override = 0;
 
@@ -118,7 +118,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 		if (current_uid().val != 0)
 			return 0;
 
-		int ret = send_sulog_dump(*arg);
+		int ret = ksu_sulog_handle_compat_dump((void __user *)*arg);
 		if (ret)
 			return 0;
 
@@ -151,20 +151,20 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 		static char original_version_buf[65] = {0};
 
 		// basically void * void __user * void __user *arg
-		void ***ppptr = (void ***)(uintptr_t)arg;
+		void ***ppptr = (uintptr_t)arg;
 
 		// user pointer storage
 		// init this as zero so this works on 32-on-64 compat (LE)
 		uint64_t u_pptr = 0;
 		uint64_t u_ptr = 0;
 
-		pr_info("sys_reboot: ppptr: %p\n", ppptr);
+		pr_info("sys_reboot: ppptr: 0x%lx \n", ppptr);
 
 		// arg here is ***, dereference to pull out **
 		if (copy_from_user(&u_pptr, (void __user *)*ppptr, sizeof(u_pptr)))
 			return 0;
 
-		pr_info("sys_reboot: u_pptr: 0x%llx\n", (unsigned long long)u_pptr);
+		pr_info("sys_reboot: u_pptr: 0x%lx \n", u_pptr);
 
 		// now we got the __user **
 		// we cannot dereference this as this is __user
@@ -172,7 +172,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 		if (copy_from_user(&u_ptr, (void __user *)u_pptr, sizeof(u_ptr)))
 			return 0;
 
-		pr_info("sys_reboot: u_ptr: 0x%llx\n", (unsigned long long)u_ptr);
+		pr_info("sys_reboot: u_ptr: 0x%lx \n", u_ptr);
 
 		// for release
 		if (strncpy_from_user(release_buf, (char __user *)u_ptr, sizeof(release_buf)) < 0)
@@ -258,8 +258,6 @@ void __init ksu_supercalls_init(void)
 		pr_info("reboot kprobe registered successfully\n");
 	}
 #endif
-
-	sulog_init_heap(); // grab heap memory
 }
 
 void __exit ksu_supercalls_exit(void){
