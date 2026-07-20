@@ -9,6 +9,7 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/version.h>
+#include "selinux/selinux.h"
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0)
 #include <linux/input-event-codes.h>
 #else
@@ -722,7 +723,6 @@ static int ksu_execve_ksud_common(const char __user *filename_user,
 	filename_p = &filename_in;
 
 	int fd = AT_FDCWD;
-
 	return ksu_handle_execveat_ksud(&fd, &filename_p, argv, NULL,
 					NULL);
 }
